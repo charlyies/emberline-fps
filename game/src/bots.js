@@ -2,7 +2,7 @@
 // line-of-sight engagement, strafing and burst fire. No external models.
 import * as THREE from 'three';
 import { WAYPOINTS } from './world.js';
-import { range } from './random.js';
+import { range, pick } from './random.js';
 
 const TEAM_COLOR = { ember: 0xff7a1a, frost: 0x37b6ff };
 const EMBER_NAMES = ['Ash', 'Cinder', 'Flint', 'Sable'];
@@ -164,13 +164,12 @@ export function updateBot(bot, dt, world, targets, rng, fire, time, onSpot) {
     } else {
       let goal = bot.lastSeen && time - bot.lastSeenAt < 6 ? bot.lastSeen : { x: 0, z: 0 };
       if (!bot.waypoint || Math.hypot(bot.waypoint.x - bot.pos.x, bot.waypoint.z - bot.pos.z) < 1.5) {
-        // Pick the waypoint closest to the goal that we can walk toward.
-        let wp = WAYPOINTS[0], wd = Infinity;
-        for (const w of WAYPOINTS) {
-          const d = Math.hypot(w.x - goal.x, w.z - goal.z) + Math.hypot(w.x - bot.pos.x, w.z - bot.pos.z) * 0.15;
-          if (d < wd) { wd = d; wp = w; }
-        }
-        bot.waypoint = wp;
+        // Route variety: score every waypoint, then pick at random among the
+        // three closest to the goal, so two bots do not march in lockstep.
+        const scored = WAYPOINTS.map((w) => ({
+          w, d: Math.hypot(w.x - goal.x, w.z - goal.z) + Math.hypot(w.x - bot.pos.x, w.z - bot.pos.z) * 0.15,
+        })).sort((a, b) => a.d - b.d);
+        bot.waypoint = pick(rng, scored.slice(0, 3)).w;
       }
       const dx = bot.waypoint.x - bot.pos.x, dz = bot.waypoint.z - bot.pos.z;
       const dist = Math.hypot(dx, dz) || 1;

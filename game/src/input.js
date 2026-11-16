@@ -2,14 +2,15 @@
 // Mouse sensitivity is adjustable in play with [ and ] (0.4–2.0×), so a
 // player who finds the default turn speed too twitchy or too slow can tune it
 // without leaving the round; the value is read back by the HUD hint.
-export function createInput(canvas, onLockChange) {
+// `onSensitivity` runs after each sensitivity change (main.js saves it).
+export function createInput(canvas, onLockChange, onSensitivity) {
   const keys = new Set();
   const state = { keys, locked: false, firing: false, aiming: false, lookX: 0, lookY: 0, sensitivity: 1.0 };
   function onKey(e, down) {
     if (e.code === 'Space') e.preventDefault();
     if (down) keys.add(e.code); else keys.delete(e.code);
-    if (down && e.code === 'BracketLeft') state.sensitivity = Math.max(0.4, +(state.sensitivity - 0.2).toFixed(1));
-    if (down && e.code === 'BracketRight') state.sensitivity = Math.min(2.0, +(state.sensitivity + 0.2).toFixed(1));
+    if (down && e.code === 'BracketLeft') { state.sensitivity = Math.max(0.4, +(state.sensitivity - 0.2).toFixed(1)); onSensitivity?.(); }
+    if (down && e.code === 'BracketRight') { state.sensitivity = Math.min(2.0, +(state.sensitivity + 0.2).toFixed(1)); onSensitivity?.(); }
   }
   window.addEventListener('keydown', (e) => onKey(e, true));
   window.addEventListener('keyup', (e) => onKey(e, false));

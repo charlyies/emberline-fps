@@ -9,7 +9,7 @@ import { createInput } from './input.js';
 import { createHud } from './hud.js';
 import { createSound } from './sound.js';
 import { WEAPONS, ARMOR_PRICE, ARMOR_ABSORB, START_MONEY, KILL_REWARD, WIN_REWARD, LOSS_REWARD, ROUND_TIME, CAPTURE_TIME, WIN_ROUNDS, GRENADE_PRICE, GRENADE_MAX, GRENADE_DAMAGE, GRENADE_RADIUS, weaponState } from './weapons.js';
-import { mulberry32, range } from './random.js';
+import { mulberry32, range, shuffle, chance } from './random.js';
 import { stageShot } from './shots.js';
 import { createViewmodel } from './viewmodel.js';
 
@@ -47,7 +47,25 @@ const tracers = createTracers(scene);
 const grenades = createGrenades(scene, world);
 const hud = createHud();
 const sound = createSound();
-const input = createInput(renderer.domElement, onLockChange);
+
+// Saved preferences (local only): difficulty and mouse sensitivity persist
+// between visits, so the title screen opens the way the player left it.
+// Both functions only run after match and input exist (on a key press or a
+// difficulty click), so referencing them here is safe.
+function saveSettings() {
+  try {
+    window.localStorage.setItem('emberline-settings',
+      JSON.stringify({ difficulty: match.difficulty, sensitivity: input.state.sensitivity }));
+  } catch { /* private mode or storage off: preferences just do not persist */ }
+}
+function loadSettings() {
+  try {
+    const s = JSON.parse(window.localStorage.getItem('emberline-settings') ?? '{}');
+    if (s.difficulty && DIFFICULTY[s.difficulty]) match.difficulty = s.difficulty;
+    if (typeof s.sensitivity === 'number') input.state.sensitivity = Math.min(2, Math.max(0.4, s.sensitivity));
+  } catch { /* corrupt or unavailable storage: keep the defaults */ }
+}
+const input = createInput(renderer.domElement, onLockChange, saveSettings);
 
 // Viewmodel gun (box assembly with walk bob, fire kick and reload dip).
 const viewmodel = createViewmodel(camera);
@@ -77,6 +95,8 @@ const player = {
 };
 let bots = [];
 let autopilot = false;
+loadSettings(); // restores the saved difficulty before the first bots spawn
+hud.setDifficulty(match.difficulty);
 let autoStrafe = 0, autoStuckTimer = 0, autoStrafeTimer = 0;
 let autoLastPos = { x: 0, z: 0 };
 let paused = false;
@@ -96,7 +116,9 @@ function spawnPositions(team) {
 function buildBots() {
   for (const b of bots) scene.remove(b.group);
   bots = [];
-  const e = spawnPositions('ember'), f = spawnPositions('frost');
+  // Fresh spawn-slot shuffle every rebuild, so the same bot does not always
+  // start from the same spot in the yard.
+  const e = shuffle(rng, spawnPositions('ember')), f = shuffle(rng, spawnPositions('frost'));
   const diff = DIFFICULTY[match.difficulty];
   for (let i = 0; i < 4; i++) bots.push(createBot(scene, world, { team: 'ember', index: i, x: e[i + 1].x, z: e[i + 1].z, rng, skillMult: diff.skill, speedMult: diff.speed }));
   for (let i = 0; i < 5; i++) bots.push(createBot(scene, world, { team: 'frost', index: i, x: f[i].x, z: f[i].z, rng, skillMult: diff.skill, speedMult: diff.speed }));
@@ -315,7 +337,9 @@ function startBuyPhase() {
   player.hp = 100; player.alive = true; player.spectate = null;
   player.pos.set(EMBER_SPAWN.x, 0, EMBER_SPAWN.z);
   player.yaw = 0; player.pitch = 0; player.velY = 0;
-  const e = spawnPositions('ember'), f = spawnPositions('frost');
+  // Fresh spawn-slot shuffle every round, so the same bot does not always
+  // start from the same spot in the yard.
+  const e = shuffle(rng, spawnPositions('ember')), f = shuffle(rng, spawnPositions('frost'));
   bots.forEach((b, i) => {
     const p = b.team === 'ember' ? e[i + 1] : f[i - 4];
     b.reset(p.x, p.z);
@@ -588,7 +612,7 @@ function autopilotStep(dt) {
     const moved = Math.hypot(player.pos.x - autoLastPos.x, player.pos.z - autoLastPos.z);
     autoLastPos = { x: player.pos.x, z: player.pos.z };
     autoStuckTimer = 0;
-    if (moved < 0.25 && autoStrafeTimer <= 0) { autoStrafe = autoStrafe === 0 ? 1 : -autoStrafe; autoStrafeTimer = 1.4; }
+    if (moved < 0.25 && autoStrafeTimer <= 0) { autoStrafe = chance(rng, 0.5) ? 1 : -1; autoStrafeTimer = 1.4; }
   }
   if (autoStrafeTimer > 0) { autoStrafeTimer -= dt; if (autoStrafeTimer <= 0) autoStrafe = 0; }
   let best = null, bestD = Infinity;
@@ -613,6 +637,7 @@ function onLockChange(locked) {
   if (!locked && match.phase === 'play' && player.alive && !paused) {
     paused = true;
     hud.title();
+    hud.showRestart();
     document.getElementById('overlay-title').textContent = 'PAUSED';
     document.getElementById('overlay-copy').innerHTML = 'Pointer released. Click below to jump back into the round.';
     document.getElementById('play').textContent = 'Resume';
@@ -625,7 +650,8 @@ hud.onPlay(() => {
   if (paused) { paused = false; hud.hideOverlay(); input.requestLock(); return; }
   if (match.phase === 'play') input.requestLock();
 });
-hud.onDifficulty((id) => { if (DIFFICULTY[id]) match.difficulty = id; });
+hud.onDifficulty((id) => { if (DIFFICULTY[id]) { match.difficulty = id; saveSettings(); } });
+hud.onRestart(() => { paused = false; hud.hideOverlay(); resetMatch(); });
 window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyB' && match.phase === 'buy') startRound();
   if (e.code === 'KeyM') sound.toggleMute();
@@ -662,6 +688,7 @@ window.addEventListener('resize', () => {
 
 // ---- main loop ----
 let accumulator = 0, lastTime = performance.now();
+let fpsFrames = 0, fpsLast = performance.now();
 function frame(now) {
   requestAnimationFrame(frame);
   if (frozen) return;
@@ -669,6 +696,8 @@ function frame(now) {
   lastTime = now;
   accumulator += dt;
   while (accumulator >= FIXED_STEP) { step(FIXED_STEP); accumulator -= FIXED_STEP; }
+  fpsFrames += 1;
+  if (now - fpsLast >= 1000) { hud.setFps(fpsFrames); fpsFrames = 0; fpsLast = now; }
   renderer.render(scene, camera);
 }
 

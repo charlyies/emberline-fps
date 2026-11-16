@@ -96,6 +96,10 @@
   .panel p b { color: var(--ink); }
   #play { font: inherit; font-weight: 600; padding: 12px 18px; border: 1px solid var(--accent); border-radius: 8px; background: var(--accent); color: #14161a; cursor: pointer; }
   #play:hover { background: var(--ink); border-color: var(--ink); }
+  #restart { font: inherit; font-weight: 600; padding: 12px 18px; margin-left: 8px; border: 1px solid var(--hairline); border-radius: 8px; background: transparent; color: var(--ink); cursor: pointer; }
+  #restart:hover { border-color: var(--ink); }
+  #restart[hidden] { display: none; }
+  #fps { position: fixed; left: 50%; bottom: 6px; transform: translateX(-50%); font-family: var(--font-readout); font-size: 11px; color: var(--muted); opacity: .7; }
   #difficulty { display: flex; gap: 8px; margin: 0 0 16px; }
   #difficulty button { flex: 1; font: inherit; font-size: 13px; padding: 8px 4px; color: var(--muted); background: #262b32; border: 1px solid var(--hairline); border-radius: 6px; cursor: pointer; }
   #difficulty button:hover { border-color: var(--accent); color: var(--ink); }
@@ -155,6 +159,7 @@
   </div>
   <div id="money">$800</div>
   <div id="banner" hidden><div id="banner-title"></div><div id="banner-sub"></div></div>
+  <div id="fps"></div>
 </div>
 
 <div id="overlay" class="overlay">
@@ -167,6 +172,7 @@
       <button type="button" data-diff="veteran">Veteran</button>
     </div>
     <button id="play" type="button">Click to play</button>
+    <button id="restart" type="button" hidden>Restart match</button>
     <div id="overlay-stats"></div>
     <ul class="keys">
       <li><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Move &nbsp; <kbd>Shift</kbd> Sprint &nbsp; <kbd>Space</kbd> Jump &nbsp; <kbd>Ctrl</kbd> Crouch</li>

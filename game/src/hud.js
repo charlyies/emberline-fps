@@ -18,6 +18,7 @@ export function createHud() {
     overlayStats: $('overlay-stats'), playBtn: $('play'), buyPanel: $('buy-panel'), titlePanel: $('title-panel'),
     buyMoney: $('buy-money'), buyList: $('buy-list'), buyTimer: $('buy-timer'),
     dmgNumbers: $('dmg-numbers'), difficulty: $('difficulty'),
+    restartBtn: $('restart'), fps: $('fps'),
   };
   let hitTimer = null;
   function showOverlay(title, copy, btn, statsHtml = '') {
@@ -29,6 +30,7 @@ export function createHud() {
     els.playBtn.textContent = btn;
     els.overlayStats.innerHTML = statsHtml;
     els.playBtn.style.display = btn ? '' : 'none';
+    els.restartBtn.hidden = true; // only the pause screen offers a restart
   }
   return {
     els,
@@ -61,6 +63,11 @@ export function createHud() {
     setHistory(history) {
       els.history.innerHTML = history.map((r) =>
         `<span class="hist-dot ${r === 'W' ? 'win' : r === 'L' ? 'loss' : 'draw'}">${r}</span>`).join('');
+    },
+    setFps(n) { els.fps.textContent = `${n} FPS`; },
+    // Mark the saved difficulty's button on the title screen.
+    setDifficulty(id) {
+      for (const b of els.difficulty.querySelectorAll('button')) b.classList.toggle('selected', b.dataset.diff === id);
     },
     showScoreboard(rowsHtml) {
       els.scoreboardBody.innerHTML = rowsHtml;
@@ -148,6 +155,8 @@ export function createHud() {
         'Play again', statsHtml);
     },
     onPlay(fn) { els.playBtn.addEventListener('click', fn); },
+    onRestart(fn) { els.restartBtn.addEventListener('click', fn); },
+    showRestart() { els.restartBtn.hidden = false; },
     onDifficulty(fn) {
       // Title-screen difficulty picker; the pressed button stays lit.
       for (const b of els.difficulty.querySelectorAll('button')) {
