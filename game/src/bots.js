@@ -31,7 +31,18 @@ function buildModel(team) {
   const chev = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.34, 4),
     new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.6, transparent: true, opacity: 0.95 }));
   chev.rotation.x = Math.PI; chev.position.y = 2.25; g.add(chev);
-  return { group: g, body, head, gun, legL, legR, chev, suitMat: suit };
+  // Floating health bar above the head: dark backplate + team-coloured fill
+  // that shrinks as the bot takes damage. main.js billboards the group
+  // toward the player camera each tick (barGroup.rotation.y).
+  const barGroup = new THREE.Group();
+  barGroup.position.y = 2.02;
+  const hpBg = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.09, 0.02),
+    new THREE.MeshStandardMaterial({ color: 0x111214, roughness: 0.6 }));
+  const hpFill = new THREE.Mesh(new THREE.BoxGeometry(0.68, 0.06, 0.03),
+    new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.2 }));
+  barGroup.add(hpBg); barGroup.add(hpFill);
+  g.add(barGroup);
+  return { group: g, body, head, gun, legL, legR, chev, suitMat: suit, barGroup, hpFill };
 }
 
 // One role per bot, so a round is not nine identical rifles: SMG bots push
@@ -79,12 +90,16 @@ export function createBot(scene, world, opts) {
       this.investigate = null; this.investigateUntil = 0; this.holdUntil = 0;
       this.group.visible = true; this.flash = 0;
       this.model.suitMat.emissive.setHex(0x000000);
+      this.model.hpFill.scale.x = 1; this.model.hpFill.position.x = 0;
     },
     damage(amount, headshot) {
       if (!this.alive) return false;
       this.health -= amount;
       this.flash = 0.12;
       this.model.suitMat.emissive.setHex(0xff2222);
+      const frac = Math.max(0, this.health) / 100;
+      this.model.hpFill.scale.x = frac;
+      this.model.hpFill.position.x = -(1 - frac) * 0.34; // shrink from the right
       if (this.health <= 0) { this.alive = false; this.group.visible = false; return true; }
       return false;
     },

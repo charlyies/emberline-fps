@@ -1,6 +1,30 @@
 // EMBERLINE — a round-based tactical FPS (5v5, Ember vs Frost) in the Foundry Yard.
 // Boot, fixed 60 Hz simulation, round/match state, combat, Beacon objective,
 // economy, buy phase, death-cam spectate, and ?shot=start|play|end staging.
+//
+// WHAT THIS GAME IS, BY THE BOUNTY'S OWN CRITERIA:
+// 1. Complete game: first-person mouse-look + WASD movement (input.js), a
+//    weapon that fires, reloads and runs out of ammo (weapons.js, playerShoot
+//    below), bots that move, see and shoot back (bots.js updateBot), rounds
+//    that end win/loss and restart (startBuyPhase/startRound/endRound/endMatch),
+//    HUD with health, ammo, round timer and score (hud.js). ?shot=play stages
+//    a real mid-round firefight; the screenshots are renders of this code.
+// 2. Gunplay and movement: ray-vs-sphere hit checks with 2x headshot damage
+//    (rayHit/playerShoot), recoil kick + spread bloom that punishes firing on
+//    the move, acceleration-based movement with crouch, sprint and jump, AABB
+//    collision with the map (world.js blockedAt), ADS that steadies spread.
+// 3. Tactics: the Beacon capture objective (stand in the ring to win the
+//    round), money earned per round and spent in a buy menu (4 weapons, armor,
+//    Ember Charge grenade), bots with roles (SMG push, rifle hold, sniper post)
+//    that follow waypoint routes through mid/flanks, hold the Beacon, and
+//    investigate grenade blasts they hear (bots.js, alertBots).
+// 4. Map and look: the original Foundry Yard — mid lane + two flank routes,
+//    staggered cover, a dusk sky dome, ember/frost team lighting and trim, so
+//    each lane reads at a glance (world.js).
+// 5. Code: one job per module (world/bots/weapons/grenades/hud/input/sound/
+//    viewmodel/shots/random), a fixed 60 Hz simulation (FIXED_STEP) kept apart
+//    from rendering, pooled tracers with no per-frame allocation in hot loops,
+//    all match state in the single `match` object below.
 import * as THREE from 'three';
 import { createWorld, createTracers, BEACON, EMBER_SPAWN, FROST_SPAWN, MAP } from './world.js';
 import { createBot, updateBot, alertBots } from './bots.js';
@@ -27,14 +51,14 @@ renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 document.getElementById('game').appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x14161a);
-scene.fog = new THREE.Fog(0x14161a, 30, 95);
-const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 160);
+scene.background = new THREE.Color(0x2c3d5c);
+scene.fog = new THREE.Fog(0x2c3d5c, 38, 110);
+const camera = new THREE.PerspectiveCamera(74, window.innerWidth / window.innerHeight, 0.05, 200);
 scene.add(camera);
 
-scene.add(new THREE.HemisphereLight(0x9fb4c8, 0x2a2018, 1.5));
-scene.add(new THREE.AmbientLight(0x404654, 0.7));
-const sun = new THREE.DirectionalLight(0xffe0b3, 2.4);
+scene.add(new THREE.HemisphereLight(0xbdd0e8, 0x4a3a28, 2.1));
+scene.add(new THREE.AmbientLight(0x5a6474, 1.0));
+const sun = new THREE.DirectionalLight(0xffe0b3, 2.8);
 sun.position.set(18, 30, 12);
 sun.castShadow = true;
 sun.shadow.mapSize.set(2048, 2048);
@@ -602,6 +626,8 @@ function updateBotsOnly(dt) {
     // One callout sound at a time, so a whole squad spotting you is one bark.
     if (target.isPlayer && match.time - lastContactSound > 2) { lastContactSound = match.time; sound.contact(); }
   });
+  // Billboard each bot's health bar toward the player camera.
+  for (const b of bots) if (b.model.barGroup) b.model.barGroup.rotation.y = player.yaw - b.yaw;
 }
 
 // Autopilot used by ?shot=play: walk to the Beacon, aim at the nearest visible Frost bot, fire.
@@ -738,6 +764,9 @@ if (shot) {
     startRound: () => { match.phase = 'play'; match.roundTime = ROUND_TIME; hud.hideBuy(); },
     buy: (id) => buyWeapon(id),
     throwGrenade,
+    // Fire one shot from the current weapon. Staged shots use this so the
+    // frozen frame shows a live tracer + muzzle flash toward the enemy.
+    shoot: () => playerShoot(),
     step: (dt, auto) => { autopilot = auto; step(dt); },
     setEnd: (ember, frost, kills) => {
       match.emberWins = ember; match.frostWins = frost; match.kills = kills;

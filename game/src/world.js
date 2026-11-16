@@ -16,8 +16,8 @@ export const WAYPOINTS = [
   { x: -7, z: 0 }, { x: 7, z: 0 }, { x: 0, z: 0 },
 ];
 
-const STEEL = 0x39404a, STEEL_DARK = 0x272b31, FLOOR = 0x2f333a;
-const EMBER = 0xff7a1a, FROST = 0x37b6ff, CRATE = 0x4a3b28, PIPE = 0x5a6068;
+const STEEL = 0x4d5563, STEEL_DARK = 0x363c46, FLOOR = 0x4a5058;
+const EMBER = 0xff7a1a, FROST = 0x37b6ff, CRATE = 0x6b5433, PIPE = 0x6a7078;
 
 export function createWorld(scene) {
   const colliders = []; // {minX,maxX,minZ,maxZ,top}
@@ -48,6 +48,28 @@ export function createWorld(scene) {
     return m;
   }
 
+  // Dusk sky dome: a gradient sphere (deep blue top, ember horizon) so the
+  // yard reads as a foundry at dusk instead of a black void. It is the only
+  // thing behind the walls, and it is never fogged.
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 4; skyCanvas.height = 256;
+  const skyCtx = skyCanvas.getContext('2d');
+  const grad = skyCtx.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#16233d');
+  grad.addColorStop(0.45, '#2c3d5c');
+  grad.addColorStop(0.72, '#7a5a44');
+  grad.addColorStop(0.82, '#c96a2a');
+  grad.addColorStop(1, '#3a2a20');
+  skyCtx.fillStyle = grad;
+  skyCtx.fillRect(0, 0, 4, 256);
+  const skyTex = new THREE.CanvasTexture(skyCanvas);
+  skyTex.colorSpace = THREE.SRGBColorSpace;
+  const sky = new THREE.Mesh(
+    new THREE.SphereGeometry(150, 24, 16),
+    new THREE.MeshBasicMaterial({ map: skyTex, side: THREE.BackSide, fog: false }),
+  );
+  group.add(sky);
+
   // Floor + perimeter walls
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(MAP.half * 2 + 8, MAP.half * 2 + 8), mat(FLOOR, 1, 0.1));
   floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; group.add(floor);
@@ -70,16 +92,32 @@ export function createWorld(scene) {
   const beaconLight = new THREE.PointLight(0xff8c3a, 30, 22, 1.6);
   beaconLight.position.set(0, 3.2, 0); group.add(beaconLight);
 
+  // A glowing trim strip on top of a cover box: team-coloured edge lighting
+  // so the lanes read at a glance (ember on the Ember half, frost on the
+  // Frost half). Purely visual, no collider.
+  function trim(x, z, w, d, topY, color) {
+    const t = new THREE.Mesh(new THREE.BoxGeometry(w, 0.07, d),
+      new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 1.8 }));
+    t.position.set(x, topY + 0.035, z);
+    group.add(t);
+    return t;
+  }
+
   // Mid-lane cover: staggered blocks either side of the Beacon
   box(-4.5, 7, 3.4, 1.5, 1.2, CRATE);
+  trim(-4.5, 7, 3.4, 1.2, 1.5, EMBER);
   box(4.5, -7, 3.4, 1.5, 1.2, CRATE);
+  trim(4.5, -7, 3.4, 1.2, 1.5, FROST);
   box(0, 10.5, 2.2, 2.4, 2.2, STEEL);
+  trim(0, 10.5, 2.2, 2.2, 2.4, EMBER);
   box(0, -10.5, 2.2, 2.4, 2.2, STEEL);
+  trim(0, -10.5, 2.2, 2.2, 2.4, FROST);
 
   // Flank routes: crate stacks + pipe columns
   for (const [x, z] of [[-16, 10], [-16, -10], [16, 10], [16, -10]]) {
     box(x, z, 3, 1.4, 3, CRATE);
-    box(x, z, 2, 1.2, 2, 0x5a4630, { y: 1.4 });
+    box(x, z, 2, 1.2, 2, 0x6b5638, { y: 1.4 });
+    trim(x, z, 3, 3, 1.4, z > 0 ? EMBER : FROST);
   }
   for (const [x, z] of [[-20, 0], [20, 0], [-9, 18], [9, -18], [-9, -18], [9, 18]]) cyl(x, z, 0.9, 3.6, PIPE);
   // Long side walls mid-flank (sightline breakers)
